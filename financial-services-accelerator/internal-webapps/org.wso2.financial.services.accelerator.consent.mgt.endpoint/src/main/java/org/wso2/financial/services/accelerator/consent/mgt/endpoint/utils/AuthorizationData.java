@@ -7,6 +7,7 @@ import org.wso2.carbon.identity.oauth2.model.OAuth2Parameters;
 import org.wso2.financial.services.accelerator.common.constant.FinancialServicesConstants;
 import org.wso2.financial.services.accelerator.common.exception.FinancialServicesException;
 import org.wso2.financial.services.accelerator.common.util.JWTUtils;
+import org.wso2.financial.services.accelerator.consent.mgt.extensions.common.ConsentExtensionConstants;
 
 import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
@@ -15,7 +16,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentMap;
 
 /**
- * Data class for Authentication.
+ * Data class for Authorizations.
  * This class contains methods for fetching and managing sensitive data required for /retrieve/{session-data-key}
  * endpoint.
  */
@@ -81,7 +82,7 @@ public class AuthorizationData {
 
         String[] keys = {
                 "scopeMetadata",
-                "isError",
+                ConsentExtensionConstants.IS_ERROR,
                 "application",
                 "scope",
                 "spQueryParams",
@@ -90,7 +91,7 @@ public class AuthorizationData {
         };
 
         for (String key : keys) {
-            if ("isError".equals(key)) {
+            if (ConsentExtensionConstants.IS_ERROR.equals(key)) {
                 if (sensitiveDataJSON.has(key)) {
                     sensitiveDataMap.put(key, sensitiveDataJSON.getBoolean(key));
                 } else {
@@ -128,16 +129,17 @@ public class AuthorizationData {
         oAuth2Parameters.setNonce(paramMap.get("nonce")[0]);
         oAuth2Parameters.setPrompt(paramMap.get("prompt")[0]);
         oAuth2Parameters.setTenantDomain(sensitiveDataJSON.getString("tenantDomain"));
-        oAuth2Parameters.setEssentialClaims(JWTBody.getString("claims"));
+        oAuth2Parameters.setEssentialClaims(String.valueOf(JWTBody.getJSONObject("claims")));
         oAuth2Parameters.setSessionDataKey(paramMap.get("sessionDataKey")[0]);
-        oAuth2Parameters.setLoginTenantDomain(sensitiveDataJSON.getString("tenantDomain")
+        oAuth2Parameters.setLoginTenantDomain(sensitiveDataJSON.getString("loggedInUser")
                 .split("@")[1].trim());
 
         // Set scopes
-        HashSet<String> scopes = new HashSet<>(Arrays.asList(paramMap.get("scopes")[0].trim().split(" ")));
+        HashSet<String> scopes = new HashSet<>(Arrays.asList(paramMap.get("scope")[0].trim().split(" ")));
         oAuth2Parameters.setScopes(scopes);
 
-        // Set consent required scopes
+        // NOTE: Set consent required scopes are set to be same as scopes
+        oAuth2Parameters.setConsentRequiredScopes(scopes);
 
         return  oAuth2Parameters;
     }
