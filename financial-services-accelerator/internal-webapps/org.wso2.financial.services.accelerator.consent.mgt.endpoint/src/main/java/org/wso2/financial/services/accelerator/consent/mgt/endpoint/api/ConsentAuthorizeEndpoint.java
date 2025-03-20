@@ -33,6 +33,7 @@ import org.wso2.financial.services.accelerator.common.exception.ConsentManagemen
 import org.wso2.financial.services.accelerator.common.exception.FinancialServicesException;
 import org.wso2.financial.services.accelerator.common.util.FinancialServicesUtils;
 import org.wso2.financial.services.accelerator.consent.mgt.endpoint.utils.AuthorizationData;
+import org.wso2.financial.services.accelerator.consent.mgt.endpoint.utils.AuthorizationUtils;
 import org.wso2.financial.services.accelerator.consent.mgt.endpoint.utils.ConsentCache;
 import org.wso2.financial.services.accelerator.consent.mgt.endpoint.utils.ConsentConstants;
 import org.wso2.financial.services.accelerator.consent.mgt.endpoint.utils.ConsentUtils;
@@ -152,7 +153,7 @@ public class ConsentAuthorizeEndpoint {
 
         if ("false".equals(sensitiveDataMap.get(ConsentExtensionConstants.IS_ERROR))) {
             String loggedInUserId = (String) sensitiveDataMap.get("loggedInUser");
-            loggedInUser = FinancialServicesUtils.resolveUsernameFromUserId(loggedInUserId);
+            loggedInUser = AuthorizationUtils.resolveUsernameFromUserId(loggedInUserId);
             app = (String) sensitiveDataMap.get("application");
             spQueryParams = (String) sensitiveDataMap.get("spQueryParams");
             scopeString = (String) sensitiveDataMap.get("scope");

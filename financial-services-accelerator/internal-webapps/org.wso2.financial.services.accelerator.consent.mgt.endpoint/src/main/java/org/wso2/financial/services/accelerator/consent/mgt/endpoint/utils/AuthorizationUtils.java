@@ -16,6 +16,7 @@ import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -80,6 +81,82 @@ public class AuthorizationUtils {
         } catch (Exception e) {
             log.error("Sensitive data retrieval from Identity Server failed.");
             throw new FinancialServicesException("Failed to fetch sensitive data from Identity Server.", e);
+        }
+    }
+
+    /**
+     * Resolves the username for a given user ID by fetching the user data and extracting the username.
+     *
+     * @param userId The UUID of the user whose username is to be retrieved.
+     * @return The extracted username, or null if not found.
+     * @throws FinancialServicesException If the user data cannot be fetched or parsed.
+     */
+    public static String resolveUsernameFromUserId(String userId) throws FinancialServicesException {
+        try {
+            // Call the fetchUserData method to retrieve the user data JSON
+            String jsonResponse = fetchUserData(userId);
+
+            // Parse the JSON response
+            JSONObject jsonObject = new JSONObject(jsonResponse);
+
+            // Extract "userName" field
+            return jsonObject.optString("userName", null);
+        } catch (Exception e) {
+            log.error("Failed to resolve username for user ID", e);
+            throw new FinancialServicesException("Error resolving username for user ID.", e);
+        }
+    }
+
+    /**
+     * Fetches user data from the WSO2 SCIM endpoint using mutual TLS authentication.
+     * @param userId The UUID of the user whose data is to be retrieved.
+     * @return A JSON-formatted string containing the user's data.
+     * @throws FinancialServicesException If an error occurs during the HTTP request or response processing.
+     */
+    public static String fetchUserData(String userId) throws FinancialServicesException {
+        try {
+            String userUUID = userId.split("@")[0];
+
+            // Sanitize userId
+            if (!isValidUUID(userUUID)) {
+                log.error("User ID is invalid.");
+                throw new FinancialServicesException("Invalid userId.");
+            }
+
+            // Construct the request URI dynamically
+            String requestUri = "https://localhost:9446/wso2/scim/Users/" + userUUID;
+            URIBuilder uriBuilder = new URIBuilder(requestUri);
+
+            HttpGet httpGet = new HttpGet(uriBuilder.build().toString());
+            httpGet.setHeader("Accept", "application/json");
+            httpGet.setHeader("Connection", "keep-alive");
+            httpGet.setHeader("Authorization",
+                    "Basic " + Base64.getEncoder().encodeToString(
+                            ("is_admin@wso2.com" + ":" + "wso2123").getBytes(StandardCharsets.UTF_8)
+                            // NOTE: Make dynamic
+                    ));
+
+            // Create an HTTP client with mutual TLS
+            CloseableHttpClient httpClient = MutualTLSHTTPClientUtils.getMutualTLSHttpsClient();
+            HttpResponse response = httpClient.execute(httpGet);
+            InputStream in;
+
+            int responseCode = response.getStatusLine().getStatusCode();
+            String responseString;
+            if (responseCode == HttpURLConnection.HTTP_OK) { // 200
+                in = response.getEntity().getContent();
+            } else {
+                log.error("User data retrieval failed with HTTP response: " + responseCode);
+                throw new FinancialServicesException("Failed to fetch user data.");
+            }
+
+            responseString = IOUtils.toString(in, StandardCharsets.UTF_8);
+            httpClient.close();
+
+            return responseString;
+        } catch (Exception e) {
+            log.error("User data retrieval failed.", e);
+            throw new FinancialServicesException("Failed to fetch user data.", e);
         }
     }
 
