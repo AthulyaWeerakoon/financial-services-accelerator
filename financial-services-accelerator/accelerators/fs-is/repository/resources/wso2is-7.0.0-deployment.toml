@@ -234,6 +234,8 @@ permissions=[]
 scopes=[]
 
 [oauth]
+allowed_scopes = ["OB.*", "profile"]
+keep_oidc_scopes_in_consent_url = true
 drop_unregistered_scopes = false
 authorize_all_scopes = true
 
