@@ -1,27 +1,39 @@
 package org.wso2.financial.services.accelerator.consent.mgt.endpoint.utils;
 
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.utils.URIBuilder;
+import org.apache.http.impl.client.CloseableHttpClient;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.wso2.financial.services.accelerator.common.exception.FinancialServicesException;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
+import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
-import java.net.URL;
 import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.regex.Pattern;
 
+
+/**
+ * Utils class for Authorization management endpoint.
+ */
 public class AuthorizationUtils {
 
     private static final Log log = LogFactory.getLog(AuthorizationUtils.class);
-    private static final String API_ENDPOINT = "/api/identity/auth/v1.1/data/OauthConsentKey";
+    private static final String API_ENDPOINT = "/api/identity/auth/v1.1/data/OauthConsentKey/";
+    private static final Pattern UUID_PATTERN = Pattern.compile(
+            "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    );
 
     /**
      * @param sessionDataKey sessionDataKey consent used for fetching sensitive data. Refer
@@ -30,37 +42,44 @@ public class AuthorizationUtils {
      */
     public static String fetchSensitiveData(String sessionDataKey) throws FinancialServicesException {
         try {
-            // Need to make SCHEME:HOST:PORT dynamic
-            URL requestUrl = new URL("https://localhost:9446" + API_ENDPOINT + sessionDataKey);
-            HttpURLConnection connection = (HttpURLConnection) requestUrl.openConnection();
 
-            connection.setRequestMethod("GET");
-            connection.setRequestProperty("Accept", "application/json");
+            // Sanitize sessionDataKey
+            if (!isValidUUID(sessionDataKey)) {
+                log.error("sessionDataKeyConsent was invalid.");
+                throw new FinancialServicesException("Invalid sessionDataKeyConsent.");
+            }
 
-            StringBuilder response = new StringBuilder();
+            // NOTE: Need to make SCHEME:HOST:PORT dynamic
+            String requestUri = "https://localhost:9446" + API_ENDPOINT + sessionDataKey;
+            URIBuilder uriBuilder = new URIBuilder(requestUri);
 
-            int responseCode = connection.getResponseCode();
+            HttpGet httpGet = new HttpGet(uriBuilder.build().toString());
+            httpGet.setHeader("Accept", "application/json");
+            httpGet.setHeader("Connection", "keep-alive");
+
+            CloseableHttpClient httpClient = MutualTLSHTTPClientUtils.getMutualTLSHttpsClient();
+            HttpResponse response = null;
+            response = httpClient.execute(httpGet);
+            InputStream in;
+
+            int responseCode = response.getStatusLine().getStatusCode();
+            String responseString;
             if (responseCode == HttpURLConnection.HTTP_OK) { // 200
-                BufferedReader in = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-                String inputLine;
-
-                while ((inputLine = in.readLine()) != null) {
-                    response.append(inputLine);
-                }
-                in.close();
-
+                in = response.getEntity().getContent();
             } else {
                 log.error("Sensitive data retrieval from Identity Server failed with HTTP response: " +
                         responseCode);
                 throw new FinancialServicesException("Failed to fetch sensitive data from Identity Server.");
             }
-            connection.disconnect();
 
-            return response.toString();
+            responseString =  IOUtils.toString(in, String.valueOf(StandardCharsets.UTF_8));
 
+            httpClient.close();
+
+            return responseString;
         } catch (Exception e) {
             log.error("Sensitive data retrieval from Identity Server failed.");
-            throw new FinancialServicesException("Failed to fetch sensitive data from Identity Server.");
+            throw new FinancialServicesException("Failed to fetch sensitive data from Identity Server.", e);
         }
     }
 
@@ -129,7 +148,8 @@ public class AuthorizationUtils {
      * @return parsed query as a map of parameters
      * @throws UnsupportedEncodingException if passed string is not utf-8 encoded
      */
-    public static ConcurrentMap<String, String[]> extractQueryParams(String query) throws UnsupportedEncodingException {
+    public static ConcurrentMap<String, String[]> extractQueryParams(String query) throws UnsupportedEncodingException,
+            UnsupportedEncodingException {
         ConcurrentMap<String, String[]> queryParams = new ConcurrentHashMap<>();
 
         if (query != null) {
@@ -147,5 +167,13 @@ public class AuthorizationUtils {
             }
         }
         return queryParams;
+    }
+
+    /**
+     * @param uuid string to verify if UUID
+     * @return is UUID or not
+     */
+    public static boolean isValidUUID(String uuid) {
+        return uuid != null && UUID_PATTERN.matcher(uuid).matches();
     }
 }

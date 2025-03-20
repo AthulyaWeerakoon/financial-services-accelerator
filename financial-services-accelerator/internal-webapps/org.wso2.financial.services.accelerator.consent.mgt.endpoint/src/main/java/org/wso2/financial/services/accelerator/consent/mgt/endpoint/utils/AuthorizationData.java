@@ -12,7 +12,10 @@ import org.wso2.financial.services.accelerator.consent.mgt.extensions.common.Con
 import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
 import java.text.ParseException;
-import java.util.*;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
 import java.util.concurrent.ConcurrentMap;
 
 /**
@@ -27,7 +30,9 @@ public class AuthorizationData {
     private ConcurrentMap<String, String[]> paramMap;
     private OAuth2Parameters oAuth2Parameters;
 
-    public AuthorizationData(String sessionDataKey) throws FinancialServicesException { loadSensitiveData(sessionDataKey); }
+    public AuthorizationData(String sessionDataKey) throws FinancialServicesException {
+        loadSensitiveData(sessionDataKey);
+    }
 
     /**
      * @param sessionDataKey sessionDataKeyConsent used to fetch sensitive data.
@@ -45,19 +50,17 @@ public class AuthorizationData {
         ConcurrentMap<String, String[]> paramMap;
         try {
             paramMap = AuthorizationUtils.extractQueryParams(sensitiveDataJSON.getString("spQueryParams"));
-        }
-        catch (UnsupportedEncodingException e) {
+        } catch (UnsupportedEncodingException e) {
             log.error("\"spQueryParams\" object in retrieved payload is not utf-8 encoded");
             throw new FinancialServicesException("Unsupported encoding in fetched sensitive data.");
         }
 
         // Extract request object body
-        JSONObject JWTbody;
+        JSONObject jwtBody;
         try {
-            JWTbody = new JSONObject(JWTUtils.decodeRequestJWT(paramMap.get("request")[0],
+            jwtBody = new JSONObject(JWTUtils.decodeRequestJWT(paramMap.get("request")[0],
                     FinancialServicesConstants.JWT_BODY));
-        }
-        catch (ParseException e){
+        } catch (ParseException e) {
             log.error("JWT parse failure");
             throw new FinancialServicesException("Failed to decode JWT.");
         }
@@ -70,7 +73,7 @@ public class AuthorizationData {
         this.paramMap = paramMap;
 
         // Build oAuth2Parameters
-        oAuth2Parameters = buildOAuth2Parameters(sensitiveDataJSON, paramMap, JWTbody);
+        oAuth2Parameters = buildOAuth2Parameters(sensitiveDataJSON, paramMap, jwtBody);
     }
 
     /**
@@ -93,9 +96,9 @@ public class AuthorizationData {
         for (String key : keys) {
             if (ConsentExtensionConstants.IS_ERROR.equals(key)) {
                 if (sensitiveDataJSON.has(key)) {
-                    sensitiveDataMap.put(key, sensitiveDataJSON.getBoolean(key));
+                    sensitiveDataMap.put(key, sensitiveDataJSON.getString(key));
                 } else {
-                    sensitiveDataMap.put(key, Boolean.FALSE);
+                    sensitiveDataMap.put(key, "false");
                 }
             } else {
                 if (sensitiveDataJSON.has(key)) {
@@ -115,21 +118,21 @@ public class AuthorizationData {
     /**
      * @param sensitiveDataJSON JSON object of sensitive data
      * @param paramMap query parameter map
-     * @param JWTBody decoded request body
+     * @param jwtBody decoded request body
      * @return oAuth2Parameters object
      */
     private OAuth2Parameters buildOAuth2Parameters(JSONObject sensitiveDataJSON,
-                                                   ConcurrentMap<String, String[]> paramMap, JSONObject JWTBody) {
+                                                   ConcurrentMap<String, String[]> paramMap, JSONObject jwtBody) {
         OAuth2Parameters oAuth2Parameters = new OAuth2Parameters();
         oAuth2Parameters.setApplicationName(sensitiveDataJSON.getString("application"));
         oAuth2Parameters.setRedirectURI(paramMap.get("redirect_uri")[0]);
         oAuth2Parameters.setState(paramMap.get("state")[0]);
         oAuth2Parameters.setResponseType(paramMap.get("response_type")[0]);
-        oAuth2Parameters.setResponseType(paramMap.get("client_id")[0]);
+        oAuth2Parameters.setClientId(paramMap.get("client_id")[0]);
         oAuth2Parameters.setNonce(paramMap.get("nonce")[0]);
         oAuth2Parameters.setPrompt(paramMap.get("prompt")[0]);
         oAuth2Parameters.setTenantDomain(sensitiveDataJSON.getString("tenantDomain"));
-        oAuth2Parameters.setEssentialClaims(String.valueOf(JWTBody.getJSONObject("claims")));
+        oAuth2Parameters.setEssentialClaims(String.valueOf(jwtBody.getJSONObject("claims")));
         oAuth2Parameters.setSessionDataKey(paramMap.get("sessionDataKey")[0]);
         oAuth2Parameters.setLoginTenantDomain(sensitiveDataJSON.getString("loggedInUser")
                 .split("@")[1].trim());
@@ -161,7 +164,7 @@ public class AuthorizationData {
     /**
      * @return oAuth2Parameters
      */
-    public OAuth2Parameters getOAuth2Parameters() {
+    public OAuth2Parameters getoAuth2Parameters() {
         return oAuth2Parameters;
     }
 }

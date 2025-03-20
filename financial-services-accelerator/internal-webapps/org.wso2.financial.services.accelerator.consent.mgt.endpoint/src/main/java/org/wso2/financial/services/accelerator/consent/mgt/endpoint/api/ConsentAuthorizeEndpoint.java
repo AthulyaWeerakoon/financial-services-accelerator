@@ -26,12 +26,13 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.json.JSONObject;
-import org.wso2.carbon.identity.oauth.cache.SessionDataCacheEntry;
 import org.wso2.carbon.identity.oauth2.RequestObjectException;
 import org.wso2.carbon.identity.oauth2.model.OAuth2Parameters;
 import org.wso2.carbon.user.api.UserStoreException;
 import org.wso2.financial.services.accelerator.common.exception.ConsentManagementException;
+import org.wso2.financial.services.accelerator.common.exception.FinancialServicesException;
 import org.wso2.financial.services.accelerator.common.util.FinancialServicesUtils;
+import org.wso2.financial.services.accelerator.consent.mgt.endpoint.utils.AuthorizationData;
 import org.wso2.financial.services.accelerator.consent.mgt.endpoint.utils.ConsentCache;
 import org.wso2.financial.services.accelerator.consent.mgt.endpoint.utils.ConsentConstants;
 import org.wso2.financial.services.accelerator.consent.mgt.endpoint.utils.ConsentUtils;
@@ -124,15 +125,15 @@ public class ConsentAuthorizeEndpoint {
     @Produces({ "application/json; charset=utf-8" })
     public Response retrieve(@Context HttpServletRequest request, @Context HttpServletResponse response,
             @PathParam("session-data-key") String sessionDataKey) throws ConsentException,
-            ConsentManagementException, UserStoreException {
+            FinancialServicesException, UserStoreException {
 
         String loggedInUser;
         String app;
         String spQueryParams;
         String scopeString;
 
-        SessionDataCacheEntry cacheEntry = ConsentCache.getCacheEntryFromSessionDataKey(sessionDataKey);
-        OAuth2Parameters oAuth2Parameters = cacheEntry.getoAuth2Parameters();
+        AuthorizationData authorizationData = new AuthorizationData(sessionDataKey);
+        OAuth2Parameters oAuth2Parameters = authorizationData.getoAuth2Parameters();
 
         // Extracting client ID for regulatory identification and redirect URI for error
         // redirects
@@ -147,7 +148,7 @@ public class ConsentAuthorizeEndpoint {
                     "Invalid redirect URI", state);
         }
 
-        Map<String, Serializable> sensitiveDataMap = ConsentUtils.getSensitiveDataWithConsentKey(sessionDataKey);
+        Map<String, Serializable> sensitiveDataMap = authorizationData.getSensitiveDataMap();
 
         if ("false".equals(sensitiveDataMap.get(ConsentExtensionConstants.IS_ERROR))) {
             String loggedInUserId = (String) sensitiveDataMap.get("loggedInUser");
@@ -155,12 +156,7 @@ public class ConsentAuthorizeEndpoint {
             app = (String) sensitiveDataMap.get("application");
             spQueryParams = (String) sensitiveDataMap.get("spQueryParams");
             scopeString = (String) sensitiveDataMap.get("scope");
-            if (!scopeString.contains("openid")) {
-                String[] scopes = cacheEntry.getParamMap().get("scope");
-                if (scopes != null && scopes.length != 0 && scopes[0].contains("openid")) {
-                    scopeString = scopes[0];
-                }
-            }
+            // Scope correction segment removed since it was configured correctly in IS
         } else {
             String isError = (String) sensitiveDataMap.get(ConsentExtensionConstants.IS_ERROR);
             // Have to throw standard error because cannot access redirect URI with this
