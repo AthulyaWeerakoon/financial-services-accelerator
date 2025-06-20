@@ -18,6 +18,7 @@
 
 package org.wso2.financial.services.accelerator.consent.mgt.extensions.authorize.impl;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.google.gson.Gson;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
@@ -41,6 +42,7 @@ import org.wso2.financial.services.accelerator.consent.mgt.extensions.authorize.
 import org.wso2.financial.services.accelerator.consent.mgt.extensions.authorize.model.ExternalAPIPreConsentPersistRequestDTO;
 import org.wso2.financial.services.accelerator.consent.mgt.extensions.authorize.model.ExternalAPIPreConsentPersistResponseDTO;
 import org.wso2.financial.services.accelerator.consent.mgt.extensions.authorize.util.ConsentAuthorizeConstants;
+import org.wso2.financial.services.accelerator.consent.mgt.extensions.authorize.util.ConsentAuthorizeUtil;
 import org.wso2.financial.services.accelerator.consent.mgt.extensions.common.AuthErrorCode;
 import org.wso2.financial.services.accelerator.consent.mgt.extensions.common.ConsentException;
 import org.wso2.financial.services.accelerator.consent.mgt.extensions.common.ConsentExtensionConstants;
@@ -77,6 +79,7 @@ public class ExternalAPIConsentPersistStep implements ConsentPersistStep {
     public void execute(ConsentPersistData consentPersistData) throws ConsentException {
 
         ConsentData consentData = consentPersistData.getConsentData();
+        JSONObject consentPersistPayload = consentPersistData.getPayload();
         String consentId;
         DetailedConsentResource detailedConsentResource = null;
         ExternalAPIConsentResourceRequestDTO externalAPIConsentResource = null;
@@ -130,11 +133,18 @@ public class ExternalAPIConsentPersistStep implements ConsentPersistStep {
                 }
             }
 
-            // Append metadata to userGrantedData
             Map<String, Object> consentMetadata = consentData.getMetaDataMap();
             if (consentMetadata != null && !consentMetadata.isEmpty()) {
+                // Reconstruct authorizedData
+                ConsentAuthorizeUtil.addAuthorizedDataObject(consentPersistPayload, consentMetadata);
+                ConsentAuthorizeUtil.addIsReauthorization(consentPersistPayload, consentMetadata);
+
+                // Remove attributes only used for reconstructing authorizedData object
+                ConsentAuthorizeUtil.trimPersistPayload(consentPersistPayload);
+                ConsentAuthorizeUtil.trimConsentMetaData(consentMetadata);
+
+                // Append metadata to userGrantedData
                 JSONObject metadataJSON;
-                JSONObject consentPersistPayload = consentPersistData.getPayload();
                 if (consentPersistPayload.has(ConsentAuthorizeConstants.METADATA)) {
                     metadataJSON = consentPersistPayload.getJSONObject(ConsentAuthorizeConstants.METADATA);
                 } else {
@@ -149,7 +159,7 @@ public class ExternalAPIConsentPersistStep implements ConsentPersistStep {
 
             // Call external service
             ExternalAPIPreConsentPersistRequestDTO.UserGrantedDataDTO userGrantedData = new
-                    ExternalAPIPreConsentPersistRequestDTO.UserGrantedDataDTO(consentPersistData.getPayload(),
+                    ExternalAPIPreConsentPersistRequestDTO.UserGrantedDataDTO(consentPersistPayload,
                     requestParameters, consentData.getUserId());
 
             ExternalAPIPreConsentPersistRequestDTO requestDTO = new ExternalAPIPreConsentPersistRequestDTO(
@@ -160,6 +170,10 @@ public class ExternalAPIConsentPersistStep implements ConsentPersistStep {
 
         } catch (FinancialServicesException e) {
             throw new ConsentException(consentData.getRedirectURI(), AuthErrorCode.SERVER_ERROR,
+                    e.getMessage(), consentData.getState());
+        } catch (JsonProcessingException e) {
+            log.error("A JSON object mapping has failed", e);
+            throw new ConsentException(consentData.getRedirectURI(), AuthErrorCode.INVALID_REQUEST,
                     e.getMessage(), consentData.getState());
         }
     }

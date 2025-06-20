@@ -28,11 +28,11 @@
         <div class="${accountSelectorClass}">
             <c:forEach items="${consumerAccounts}" var="account" varStatus="accountIdx">
                 <%-- Display checkboxes for each account if multiple account selection is allowed --%>
-                <label for="<c:choose><c:when test='${not empty idSuffix}'>${account['displayName']}-${idSuffix}</c:when><c:otherwise>${account['displayName']}</c:otherwise></c:choose>">
+                <label for="<c:choose><c:when test='${not empty idSuffix}'>${account.uuid}-${idSuffix}</c:when><c:otherwise>${account.uuid}</c:otherwise></c:choose>">
                     <input type="checkbox"
-                        id="<c:choose><c:when test='${not empty idSuffix}'>${account['displayName']}-${idSuffix}</c:when><c:otherwise>${account['displayName']}</c:otherwise></c:choose>"
-                        name="<c:choose><c:when test='${not empty idSuffix}'>accountsOpt-${idSuffix}</c:when><c:otherwise>accountsOpt</c:otherwise></c:choose>"
-                        value="${accountIdx.index}"
+                        id="<c:choose><c:when test='${not empty idSuffix}'>${account.uuid}-${idSuffix}</c:when><c:otherwise>${account.uuid}</c:otherwise></c:choose>"
+                        name="<c:choose><c:when test='${not empty idSuffix}'>accounts-${idSuffix}</c:when><c:otherwise>accounts</c:otherwise></c:choose>"
+                        value="${account.uuid}"
                         <c:if test="${ignorePreSelect ne 'true' and account['selected']}">checked</c:if>
                     />
                     ${account['displayName']}
@@ -46,10 +46,10 @@
         <div class="${accountSelectorClass}">
             <%-- Display an account select for all accounts if multiple account selection is not allowed --%>
             <select class="account-select"
-                name="<c:choose><c:when test='${not empty idSuffix}'>accountsOpt-${idSuffix}</c:when><c:otherwise>accountsOpt</c:otherwise></c:choose>">
+                name="<c:choose><c:when test='${not empty idSuffix}'>accounts-${idSuffix}</c:when><c:otherwise>accounts</c:otherwise></c:choose>">
                 <option hidden disabled selected value> -- Select an Account  -- </option>
                 <c:forEach items="${consumerAccounts}" var="account" varStatus="accountIdx">
-                    <option value="${accountIdx.index}">
+                    <option value="${account.uuid}">
                         ${account['displayName']}
                     </option>
                 </c:forEach>

@@ -50,6 +50,7 @@ import org.wso2.financial.services.accelerator.consent.mgt.extensions.internal.C
 import org.wso2.financial.services.accelerator.consent.mgt.service.ConsentCoreService;
 
 import java.util.ArrayList;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -116,13 +117,13 @@ public class ExternalAPIConsentRetrievalStep implements ConsentRetrievalStep {
 
             // Filter out consent and consumer data
             // Append consumer data to json object to be displayed in consent page
-            jsonObject.put(ConsentAuthorizeConstants.CONSENT_DATA, new JSONObject(
-                    objectMapper.writeValueAsString(responseDTO.getConsentData())));
+            JSONObject consentDataJSON = ConsentAuthorizeUtil.buildConsentDataJSON(responseDTO);
+            jsonObject.put(ConsentAuthorizeConstants.CONSENT_DATA, consentDataJSON);
 
             // Append consumer data, if exists, to json object
             if (responseDTO.getConsumerData() != null) {
-                jsonObject.put(ConsentAuthorizeConstants.CONSUMER_DATA, new JSONObject(
-                        objectMapper.writeValueAsString(responseDTO.getConsumerData())));
+                JSONObject consumerDataJSON = ConsentAuthorizeUtil.buildConsumerDataJSON(responseDTO);
+                jsonObject.put(ConsentAuthorizeConstants.CONSUMER_DATA, consumerDataJSON);
             }
 
             // Set request parameters as metadata to be used in persistence extension
@@ -133,10 +134,12 @@ public class ExternalAPIConsentRetrievalStep implements ConsentRetrievalStep {
                 consentData.setType(ConsentExtensionConstants.DEFAULT);
             }
 
-            // Storing consent metadata for retrieval at persistence
-            if (responseDTO.getMetadata() != null) {
-                consentData.setMetaDataMap(responseDTO.getMetadata());
-            }
+            // Storing consent metadata for attribute retrieval at persistence
+            Map<String, Object> metadataMap = ConsentAuthorizeUtil.getConsentMapFromResponse(responseDTO);
+            // Append isReauthorization parameter to metadata
+            metadataMap.put(ConsentAuthorizeConstants.IS_REAUTHORIZATION,
+                    Boolean.TRUE.equals(responseDTO.getConsentData().getIsReauthorization()));
+            consentData.setMetaDataMap(metadataMap);
 
         } catch (FinancialServicesException e) {
             // ToDo: Improve error handling

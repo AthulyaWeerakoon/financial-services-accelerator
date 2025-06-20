@@ -46,7 +46,9 @@
                                         <div class="col-md-12 ui box">
                                         
                                             <%--Display consent page header--%>
-                                            <jsp:include page="includes/consent-header.jsp"/>
+                                            <h3 class="ui header">
+                                                <strong>${app}</strong> requests following details.
+                                            </h3>
 
                                             <h4 class="section-heading-5 ui subheading">Data requested:</h4>
 
@@ -55,11 +57,11 @@
 
                                             <c:if test="${not empty permissions}">
                                                 <%-- If permissions are specified --%>
-                                                <jsp:include page="includes/accounts-with-permissions.jsp"/>
+                                                <jsp:include page="includes/permissions-associated-accounts.jsp"/>
                                             </c:if>
                                             <c:if test="${empty permissions}">
                                                 <%-- If permissions are not specified --%>
-                                                <jsp:include page="includes/accounts-without-permissions.jsp"/>
+                                                <jsp:include page="includes/consent-associated-accounts.jsp"/>
                                             </c:if>
                                         </div>
                                     </div>
