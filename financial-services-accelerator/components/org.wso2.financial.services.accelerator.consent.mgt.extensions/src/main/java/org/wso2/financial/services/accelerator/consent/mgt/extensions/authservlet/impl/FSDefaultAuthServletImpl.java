@@ -38,6 +38,10 @@ public class FSDefaultAuthServletImpl implements FSAuthServletInterface {
     @Override
     public Map<String, Object> updateRequestAttribute(HttpServletRequest request, JSONObject dataSet,
                                                       ResourceBundle resourceBundle) {
+        // Append resource bundle data to request
+        Utils.appendResourceBundleParams(dataSet, resourceBundle);
+        Utils.appendLanguageOptions(dataSet, request);
+
         // Format all entries of basic consent data to be JSONArrays
         Utils.formatBasicConsentData(dataSet);
 
