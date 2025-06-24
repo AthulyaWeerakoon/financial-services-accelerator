@@ -16,6 +16,8 @@
 ~ under the License.
 --%>
 
+<%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
+<% response.setCharacterEncoding("UTF-8"); %>
 <%@ page import="java.util.List" %>
 <%@ page import="java.util.Map" %>
 
@@ -28,7 +30,7 @@
         <script src="js/auth-functions.js"></script>
     </head>
 
-    <body>
+    <body dir="${textDirection}">
         <div class="page-content-wrapper" style="position: relative; min-height: 100vh;">
             <div class="container-fluid " style="padding-bottom: 40px">
                 <div class="container">
@@ -47,10 +49,10 @@
                                         
                                             <%--Display consent page header--%>
                                             <h3 class="ui header">
-                                                <strong>${app}</strong> requests following details.
+                                                ${appRequestsDetails}
                                             </h3>
 
-                                            <h4 class="section-heading-5 ui subheading">Data requested:</h4>
+                                            <h4 class="section-heading-5 ui subheading">${dataRequested}</h4>
 
                                             <%--Display basic consent data--%>
                                             <jsp:include page="includes/basic-consent-data.jsp"/>
