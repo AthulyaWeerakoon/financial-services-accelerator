@@ -19,6 +19,7 @@
 package org.wso2.financial.services.accelerator.consent.mgt.extensions.authservlet.utils;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import org.apache.commons.lang3.StringEscapeUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -146,49 +147,12 @@ public class Utils {
     }
 
     /**
-     * Converts String occurrences of values in BasicConsentData to arrays with single value.
-     *
-     * @param dataSet dataSet to be formatted
-     */
-    public static void formatBasicConsentData(JSONObject dataSet) {
-        if (dataSet == null) {
-            return;
-        }
-
-        JSONObject consentData = dataSet.optJSONObject(ConsentAuthorizeConstants.CONSENT_DATA);
-        if (consentData == null) {
-            return;
-        }
-
-        JSONObject basicConsentData = consentData.optJSONObject(ConsentAuthorizeConstants.BASIC_CONSENT_DATA);
-        if (basicConsentData == null) {
-            return;
-        }
-
-        JSONObject formatted = new JSONObject();
-
-        for (String key : basicConsentData.keySet()) {
-            Object value = basicConsentData.get(key);
-
-            if (value instanceof JSONArray) {
-                formatted.put(key, value);
-            } else {
-                JSONArray arr = new JSONArray();
-                arr.put(value);
-                formatted.put(key, arr);
-            }
-        }
-
-        consentData.put(ConsentAuthorizeConstants.BASIC_CONSENT_DATA, formatted);
-    }
-
-    /**
      * Expand sub-attributes within the retrieved payload.
      *
      * @param dataSet dataSet received from the execution of retrieval steps
      * @return updated request attribute map
      */
-    public static Map<String, Object> returnAttributesFromDataSet(JSONObject dataSet) {
+    public static Map<String, Object> extractAttributesFromDataSet(JSONObject dataSet) {
         Map<String, Object> attributeMap = new HashMap<>();
 
         if (dataSet == null) {
@@ -287,21 +251,18 @@ public class Utils {
      * @return request parameter object
      */
     @SuppressFBWarnings("SERVLET_PARAMETER")
-    // Suppressed content - request.getParameter("encodedAccountsPermissionsData")
-    // Suppression reason - False Positive : These endpoints are secured with access control
-    // as defined in the IS deployment.toml file
     // Suppressed content - request.getParameterMap().entrySet()
     // Suppression reason - False Positive : These endpoints are secured with access control
     // as defined in the IS deployment.toml file
-    // Suppressed warning count - 2
+    // Suppressed warning count - 1
     private static JSONObject filterAccountPermissionParameters(HttpServletRequest request) {
         JSONObject filteredParameters =  new JSONObject();
 
         // Append all included permission and selected accounts to authorizedData Object
         for (Map.Entry<String, String[]> parameter: request.getParameterMap().entrySet()) {
             if (parameter.getKey().contains("permission")) {
-                // Permission for a specific index should not have multiple hashes
-                filteredParameters.put(parameter.getKey(), parameter.getValue()[0]);
+                // Permission for a specific index should not have multiple values
+                filteredParameters.put(parameter.getKey(), StringEscapeUtils.unescapeHtml4(parameter.getValue()[0]));
             } else if (parameter.getKey().contains("accounts")) {
                 filteredParameters.put(parameter.getKey(), new JSONArray(parameter.getValue()));
             }
@@ -410,5 +371,23 @@ public class Utils {
         }
 
         return null;
+    }
+    
+    /**
+     * Appends HTML escaped JSON object of permissions as an attribute of each permission.
+     *
+     * @param dataSet   dataSet received from the execution of retrieval steps
+     */
+    public static void appendEscapedPermissionJSONsToPermissions(JSONObject dataSet) {
+        JSONObject consentData = dataSet.optJSONObject(ConsentAuthorizeConstants.CONSENT_DATA);
+        if (consentData != null) {
+            JSONArray permissions = consentData.optJSONArray(ConsentAuthorizeConstants.PERMISSIONS);
+            if (permissions != null) {
+                for (int i = 0; i < permissions.length(); i++) {
+                    JSONObject permission = permissions.getJSONObject(i);
+                    permission.put(Constants.ESCAPED_JSON, StringEscapeUtils.escapeHtml4(permission.toString()));
+                }
+            }
+        }
     }
 }

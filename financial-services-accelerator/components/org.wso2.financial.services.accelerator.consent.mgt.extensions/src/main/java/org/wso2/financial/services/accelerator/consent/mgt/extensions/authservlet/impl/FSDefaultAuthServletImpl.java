@@ -44,9 +44,12 @@ public class FSDefaultAuthServletImpl implements FSAuthServletInterface {
 
         // Format all entries of basic consent data to be JSONArrays
         Utils.formatBasicConsentData(dataSet);
+        
+        // Append escaped permission JSON objects to permissions
+        Utils.appendEscapedPermissionJSONsToPermissions(dataSet);
 
         // Extracts a map of attributes to push to the JSP
-        return Utils.returnAttributesFromDataSet(dataSet);
+        return Utils.extractAttributesFromDataSet(dataSet);
     }
 
     @Override

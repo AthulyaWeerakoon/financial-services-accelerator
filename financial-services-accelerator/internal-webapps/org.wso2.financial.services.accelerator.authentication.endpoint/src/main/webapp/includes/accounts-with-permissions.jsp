@@ -20,7 +20,7 @@
 <%@ taglib prefix = "c" uri = "http://java.sun.com/jsp/jstl/core" %>
 
 <c:forEach items="${permissions}" var="permission" varStatus="permissionLoop">
-    <input type="hidden" name="permission-${permissionLoop.index}" value="${permission.uuid}"/>
+    <input type="hidden" name="permission-${permissionLoop.index}" value="${permission.escapedJson}"/>
     <div class="padding" style="border:1px solid #555;">
         <b>${requestedPermissions}</b>
         <ul class="scopes-list padding">
