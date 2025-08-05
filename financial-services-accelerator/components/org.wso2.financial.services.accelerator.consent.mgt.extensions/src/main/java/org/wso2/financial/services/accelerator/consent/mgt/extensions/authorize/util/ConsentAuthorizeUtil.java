@@ -32,6 +32,7 @@ import org.wso2.financial.services.accelerator.common.constant.FinancialServices
 import org.wso2.financial.services.accelerator.common.util.FinancialServicesUtils;
 import org.wso2.financial.services.accelerator.consent.mgt.dao.models.ConsentResource;
 import org.wso2.financial.services.accelerator.consent.mgt.extensions.authorize.model.AccountDTO;
+import org.wso2.financial.services.accelerator.consent.mgt.extensions.authorize.model.ConsentDataDTO;
 import org.wso2.financial.services.accelerator.consent.mgt.extensions.authorize.model.ConsumerAccountDTO;
 import org.wso2.financial.services.accelerator.consent.mgt.extensions.authorize.model.PermissionDTO;
 import org.wso2.financial.services.accelerator.consent.mgt.extensions.authorize.model.PopulateConsentAuthorizeScreenDTO;
@@ -51,6 +52,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Util class for consent authorize operations.
@@ -93,8 +95,8 @@ public class ConsentAuthorizeUtil {
      * @return consentId
      * @throws ConsentException Consent Exception
      */
-    public static String extractConsentId(String requestObject) throws ConsentException {
-
+    public static String extractConsentIdFromRequestObject(String requestObject) throws ConsentException {
+        log.debug("Extracting consent ID from request object");
         String authFlowConsentIdSource = configParser.getAuthFlowConsentIdSource();
 
         try {
@@ -116,7 +118,7 @@ public class ConsentAuthorizeUtil {
         }
 
         if (FinancialServicesConstants.REQUEST_PARAM.equals(authFlowConsentIdSource)) {
-            return getConsentIdFromRequestParam(ConsentAuthorizeUtil.getRequestObjectJson(requestObject));
+            return extractConsentIdFromRequestParam(ConsentAuthorizeUtil.getRequestObjectJson(requestObject));
         }
 
         return null;
@@ -128,8 +130,8 @@ public class ConsentAuthorizeUtil {
      * @param requestParameters Request parameters
      * @return consentId
      */
-    public static String getConsentIdFromRequestParam(JSONObject requestParameters) {
-
+    public static String extractConsentIdFromRequestParam(JSONObject requestParameters) {
+        log.debug("Extracting consent ID from request parameters");
         String key = configParser.getConsentIdExtractionKey();
 
         // TODO: need to support other request parameters based on requirements
@@ -180,6 +182,36 @@ public class ConsentAuthorizeUtil {
             requestObjectJson = new JSONObject();
         }
         return requestObjectJson;
+    }
+
+    /**
+     * Method to build query params into a json object.
+     *
+     * @param queryParams String of query parameters from request
+     * @return a json object of query parameters
+     */
+    public static JSONObject getQueryParamJson(String queryParams) {
+        JSONObject json = new JSONObject();
+
+        if (queryParams == null || queryParams.trim().isEmpty()) {
+            log.debug("Request query parameters are null or empty");
+            return json;
+        }
+
+        String[] pairs = queryParams.split("&");
+
+        for (String pair : pairs) {
+            String[] keyValue = pair.split("=", 2);
+            if (keyValue.length == 2) {
+                json.put(keyValue[0], keyValue[1]);
+            } else if (keyValue.length == 1) {
+                log.debug(String.format("Query parameter '%s' has no value", keyValue[0].replaceAll(
+                        "\n\r", "")));
+                json.put(keyValue[0], "");
+            }
+        }
+
+        return json;
     }
 
     /**
@@ -356,6 +388,7 @@ public class ConsentAuthorizeUtil {
         JSONArray displayValues = data.getJSONArray(ConsentExtensionConstants.PERMISSIONS);
         if (displayValues != null) {
             JSONObject permission = new JSONObject();
+            permission.put(ConsentAuthorizeConstants.UID, UUID.randomUUID());
             permission.put(ConsentAuthorizeConstants.DISPLAY_VALUES, displayValues);
             permissions.put(permission);
         }
@@ -627,30 +660,36 @@ public class ConsentAuthorizeUtil {
     // Suppressed warning count - 1
     public static void addAuthorizedDataObject(JSONObject consentPersistPayload, Map<String, Object> metaDataMap)
             throws JsonProcessingException { // retrieved accounts and permissions from consent metadata
-        Map<String, Integer> permissionJSONToIndex = new HashMap<>(); // permission objects to permission indices
+        Map<String, Integer> permissionUIDToIndex = new HashMap<>(); // permission UID to permission indices
         Map<String, ConsumerAccountDTO> accountNameToObject = new HashMap<>();  // account names to accounts map
         // metadata permission indices to selected account map (-1 index for accounts selected for consent)
         Map<Integer, Set<JSONObject>> permissionIdxToAccountsMap = new HashMap<>();
 
         // Extract and separate permissions, consumer accounts and consent initiated accounts
-        List<PermissionDTO> permissions;
+        List<PermissionDTO> permissions = null;
         List<ConsumerAccountDTO> consumerAccounts = null;
-        List<AccountDTO> initiatedAccountsForConsent;
+        List<AccountDTO> initiatedAccountsForConsent = null;
         PopulateConsentAuthorizeScreenDTO populateResponseDTO =
                 (PopulateConsentAuthorizeScreenDTO) metaDataMap
                         .get(ConsentAuthorizeConstants.EXTERNAL_API_PRE_CONSENT_AUTHORIZE_RESPONSE);
-        permissions = populateResponseDTO.getConsentData().getPermissions();
+
+        // Set consent data related attributes
+        ConsentDataDTO consentData = populateResponseDTO.getConsentData();
+        if (consentData != null) {
+            permissions = consentData.getPermissions();
+            initiatedAccountsForConsent = consentData.getInitiatedAccountsForConsent();
+        }
+
+        // Set consumer data related attributes
         if (populateResponseDTO.getConsumerData() != null) {
             consumerAccounts = populateResponseDTO.getConsumerData().getAccounts();
         }
-        initiatedAccountsForConsent = populateResponseDTO.getConsentData().getInitiatedAccountsForConsent();
 
-
-        // Map permission objects to their indexes
+        // Map permission UIDs to their indexes
         if (permissions != null) {
             for (int i = 0; i < permissions.size(); i++) {
-                String serialized = objectMapper.writeValueAsString(permissions.get(i));
-                permissionJSONToIndex.put(serialized, i);
+                String uid = permissions.get(i).getUid();
+                permissionUIDToIndex.put(uid, i);
             }
         }
 
@@ -663,31 +702,17 @@ public class ConsentAuthorizeUtil {
 
         // Process consumer accounts
         // Map permission objects to selected account objects from JSP
-        Boolean allowMultipleAccounts = populateResponseDTO.getConsentData().getAllowMultipleAccounts();
-        allowMultipleAccounts = allowMultipleAccounts != null && allowMultipleAccounts;
+        boolean allowMultipleAccounts =
+                consentData != null && Boolean.TRUE.equals(consentData.getAllowMultipleAccounts());
         JSONObject requestParameters = consentPersistPayload
-                .optJSONObject(ConsentAuthorizeConstants.REQUEST_ACCOUNT_PERMISSION_PARAMETERS);
+                .optJSONObject(ConsentAuthorizeConstants.REQUEST_PARAMETERS);
 
         if (requestParameters != null && !accountNameToObject.isEmpty()) {
             Map<Integer, String> indexToPermissionHashMap = new HashMap<>();
 
-            // Map permission indices from request to objects
             for (String key: requestParameters.keySet()) {
-                String[] keyIndexPair = key.trim().split("-");
-
-                // Note: this assumes that permission of specific index precedes accounts of that index
-                if ("permission".equals(keyIndexPair[0])) {
-                    // If permission, add to index to permission hash map
-                    Integer index = Integer.parseInt(keyIndexPair[1]);
-                    indexToPermissionHashMap.put(index, requestParameters.getString(key).trim());
-                }
-            }
-
-            // Create account-permission links
-            for (String key: requestParameters.keySet()) {
-                String[] keyIndexPair = key.trim().split("-");
-
-                if ("accounts".equals(keyIndexPair[0])) {
+                if ("accounts".equals(key)) {
+                    // Accounts initiated under the entire consent instead of for a permission
 
                     // allowMultipleAccounts validation
                     if (!allowMultipleAccounts && requestParameters.getJSONArray(key).length() > 1) {
@@ -695,33 +720,43 @@ public class ConsentAuthorizeUtil {
                                 "when only one is allowed");
                     }
 
-                    for (Object account: requestParameters.getJSONArray(key)) {
-                        // Check if account selected for a permission or for consent
-                        if (keyIndexPair.length < 2) {
-                            // Accounts selected for consent
+                    Set<JSONObject> accountSetForPermission = permissionIdxToAccountsMap
+                            .computeIfAbsent(-1, k -> new HashSet<>());
 
-                            Set<JSONObject> accountSetForPermission = permissionIdxToAccountsMap
-                                    .computeIfAbsent(-1, k -> new HashSet<>());
+                    JSONArray accountsArray = requestParameters.getJSONArray(key);
+                    for (int i = 0; i < accountsArray.length(); i++) {
 
-                            // Mark them as accounts for consent
-                            String accountName = (String) account;
-                            ConsumerAccountDTO accountObj = accountNameToObject.get(accountName);
-                            accountSetForPermission.add(new JSONObject(objectMapper.writeValueAsString(accountObj)));
+                        // Mark them as accounts for consent
+                        String accountName = accountsArray.getString(i);
+                        ConsumerAccountDTO accountObj = accountNameToObject.get(accountName);
+                        accountSetForPermission.add(new JSONObject(objectMapper.writeValueAsString(accountObj)));
+                    }
 
-                        } else {
-                            // Accounts selected for permission
-                            // Get permission index for retrieved permission
-                            String permissionJSON = indexToPermissionHashMap.get(Integer.parseInt(keyIndexPair[1]));
-                            Integer retrievedPermissionIdx = permissionJSONToIndex.get(permissionJSON);
+                } else {
+                    // Accounts initiated under permissions
+                    // Get permission index for retrieved permission
+                    Integer retrievedPermissionIdx = permissionUIDToIndex.getOrDefault(key, null);
 
-                            Set<JSONObject> accountSetForPermission = permissionIdxToAccountsMap
-                                    .computeIfAbsent(retrievedPermissionIdx, k -> new HashSet<>());
+                    if (retrievedPermissionIdx == null) {
+                        continue;
+                    }
 
-                            // Mark them as accounts for given permission
-                            String accountName = (String) account;
-                            ConsumerAccountDTO accountObj = accountNameToObject.get(accountName);
-                            accountSetForPermission.add(new JSONObject(objectMapper.writeValueAsString(accountObj)));
-                        }
+                    // allowMultipleAccounts validation
+                    if (!allowMultipleAccounts && requestParameters.getJSONArray(key).length() > 1) {
+                        throw new IllegalStateException("Found multiple account selections " +
+                                "when only one is allowed");
+                    }
+
+                    Set<JSONObject> accountSetForPermission = permissionIdxToAccountsMap
+                            .computeIfAbsent(retrievedPermissionIdx, k -> new HashSet<>());
+
+                    JSONArray accountsArray = requestParameters.getJSONArray(key);
+                    for (int i = 0; i < accountsArray.length(); i++) {
+
+                        // Mark them as accounts for given permission
+                        String accountName = accountsArray.getString(i);
+                        ConsumerAccountDTO accountObj = accountNameToObject.get(accountName);
+                        accountSetForPermission.add(new JSONObject(objectMapper.writeValueAsString(accountObj)));
                     }
                 }
             }
@@ -808,8 +843,8 @@ public class ConsentAuthorizeUtil {
      * @param consentPersistPayload payload sent to consent persistence
      */
     public static void trimPersistPayload(JSONObject consentPersistPayload) {
-        if (consentPersistPayload.has(ConsentAuthorizeConstants.REQUEST_ACCOUNT_PERMISSION_PARAMETERS)) {
-            consentPersistPayload.remove(ConsentAuthorizeConstants.REQUEST_ACCOUNT_PERMISSION_PARAMETERS);
+        if (consentPersistPayload.has(ConsentAuthorizeConstants.REQUEST_PARAMETERS)) {
+            consentPersistPayload.remove(ConsentAuthorizeConstants.REQUEST_PARAMETERS);
         }
     }
 
@@ -824,8 +859,8 @@ public class ConsentAuthorizeUtil {
             PopulateConsentAuthorizeScreenDTO responseDTO = (PopulateConsentAuthorizeScreenDTO)
                     metaDataMap.get(ConsentAuthorizeConstants.EXTERNAL_API_PRE_CONSENT_AUTHORIZE_RESPONSE);
 
-            if (responseDTO.getMetadata() != null) {
-                metaDataMap.putAll(responseDTO.getMetadata());
+            if (responseDTO.getConsentData().getConsentMetadata() != null) {
+                metaDataMap.putAll(responseDTO.getConsentData().getConsentMetadata());
             }
         }
 
@@ -854,10 +889,19 @@ public class ConsentAuthorizeUtil {
      * Adds isReauthorization parameter from consent metadata to consent persist payload.
      *
      * @param consentPersistPayload payload sent to consent persistence
-     * @param consentMetadata consent metadata map
+     * @param metaDataMap consent metadata map
      */
-    public static void addIsReauthorization(JSONObject consentPersistPayload, Map<String, Object> consentMetadata) {
-        consentPersistPayload.put(ConsentAuthorizeConstants.IS_REAUTHORIZATION,
-                Boolean.TRUE.equals(consentMetadata.get(ConsentAuthorizeConstants.IS_REAUTHORIZATION)));
+    public static void addIsReauthorization(JSONObject consentPersistPayload, Map<String, Object> metaDataMap) {
+        PopulateConsentAuthorizeScreenDTO populateResponseDTO =
+                (PopulateConsentAuthorizeScreenDTO) metaDataMap
+                        .get(ConsentAuthorizeConstants.EXTERNAL_API_PRE_CONSENT_AUTHORIZE_RESPONSE);
+
+        // Set consent data related attributes
+        ConsentDataDTO consentData = populateResponseDTO.getConsentData();
+
+        Boolean isReauthorization = (consentData == null) ? null : consentData.getIsReauthorization();
+        isReauthorization = isReauthorization != null && isReauthorization;
+
+        consentPersistPayload.put(ConsentAuthorizeConstants.IS_REAUTHORIZATION, Boolean.TRUE.equals(isReauthorization));
     }
 }

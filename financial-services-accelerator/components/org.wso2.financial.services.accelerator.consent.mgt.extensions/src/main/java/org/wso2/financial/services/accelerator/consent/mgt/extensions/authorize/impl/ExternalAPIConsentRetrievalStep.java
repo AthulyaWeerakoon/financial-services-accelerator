@@ -61,6 +61,7 @@ public class ExternalAPIConsentRetrievalStep implements ConsentRetrievalStep {
 
     private final ConsentCoreService consentCoreService;
     private final boolean isPreInitiatedConsent;
+    private final String authFlowConsentIdSource;
     private static final Log log = LogFactory.getLog(ExternalAPIConsentRetrievalStep.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
     static FinancialServicesValidator fsValidator = FinancialServicesValidator.getInstance();
@@ -70,6 +71,7 @@ public class ExternalAPIConsentRetrievalStep implements ConsentRetrievalStep {
         consentCoreService = ConsentExtensionsDataHolder.getInstance().getConsentCoreService();
         FinancialServicesConfigParser configParser = FinancialServicesConfigParser.getInstance();
         isPreInitiatedConsent = configParser.isPreInitiatedConsent();
+        authFlowConsentIdSource = configParser.getAuthFlowConsentIdSource();
     }
 
     @Override
@@ -78,9 +80,23 @@ public class ExternalAPIConsentRetrievalStep implements ConsentRetrievalStep {
         if (!consentData.isRegulatory()) {
             return;
         }
-        String requestObject = ConsentAuthorizeUtil.extractRequestObject(consentData.getSpQueryParams());
-        JSONObject requestParameters = ConsentAuthorizeUtil.getRequestObjectJson(requestObject);
-        String consentId = ConsentAuthorizeUtil.extractConsentId(requestObject);
+
+        // Load params from request object or query
+        log.debug("Consent ID source from config: " + authFlowConsentIdSource.replaceAll(
+                "\n\r", ""));
+
+        JSONObject requestParameters;
+        String consentId;
+        if (FinancialServicesConstants.REQUEST_PARAM.equals(authFlowConsentIdSource)) {
+            // Extract parameters from query
+            requestParameters = ConsentAuthorizeUtil.getQueryParamJson(consentData.getSpQueryParams());
+            consentId = ConsentAuthorizeUtil.extractConsentIdFromRequestParam(requestParameters);
+        } else {
+            // Extract parameters from request object
+            String requestObject = ConsentAuthorizeUtil.extractRequestObject(consentData.getSpQueryParams());
+            requestParameters = ConsentAuthorizeUtil.getRequestObjectJson(requestObject);
+            consentId = ConsentAuthorizeUtil.extractConsentIdFromRequestObject(requestObject);
+        }
 
         try {
             if (isPreInitiatedConsent) {
@@ -118,8 +134,15 @@ public class ExternalAPIConsentRetrievalStep implements ConsentRetrievalStep {
 
             // Filter out consent and consumer data
             // Append consumer data to json object to be displayed in consent page
-            jsonObject.put(ConsentAuthorizeConstants.CONSENT_DATA,
-                    new JSONObject(objectMapper.writeValueAsString(responseDTO.getConsentData())));
+            if (responseDTO.getConsentData() != null) {
+                JSONObject consentDataJSON =
+                        new JSONObject(objectMapper.writeValueAsString(responseDTO.getConsentData()));
+
+                // Remove consent metadata
+                consentDataJSON.remove(ConsentAuthorizeConstants.CONSENT_METADATA);
+
+                jsonObject.put(ConsentAuthorizeConstants.CONSENT_DATA, consentDataJSON);
+            }
 
             // Append consumer data, if exists, to json object
             if (responseDTO.getConsumerData() != null) {

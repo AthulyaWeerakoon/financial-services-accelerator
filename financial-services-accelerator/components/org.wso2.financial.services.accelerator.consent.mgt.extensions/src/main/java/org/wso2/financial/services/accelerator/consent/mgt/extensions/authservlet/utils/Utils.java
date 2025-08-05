@@ -19,7 +19,6 @@
 package org.wso2.financial.services.accelerator.consent.mgt.extensions.authservlet.utils;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import org.apache.commons.lang3.StringEscapeUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -239,8 +238,8 @@ public class Utils {
         Map<String, Object> persistMap = new HashMap<>();
 
         // Add account and permission request parameters
-        persistMap.put(ConsentAuthorizeConstants.REQUEST_ACCOUNT_PERMISSION_PARAMETERS,
-                filterAccountPermissionParameters(request));
+        persistMap.put(ConsentAuthorizeConstants.REQUEST_PARAMETERS,
+                new JSONObject(request.getParameterMap()));
 
         return persistMap;
     }
@@ -389,5 +388,18 @@ public class Utils {
                 }
             }
         }
+    }
+
+    /**
+     * Adds optional backslash if it's missing from configured jsp path.
+     *
+     * @param configuredPath    JSP path retrieved from configuration file
+     * @return  correctly formatted path as required
+     */
+    public static String formatPath(String configuredPath) {
+        if (configuredPath.charAt(0) != '/') {
+            return "/" + configuredPath;
+        }
+        return configuredPath;
     }
 }

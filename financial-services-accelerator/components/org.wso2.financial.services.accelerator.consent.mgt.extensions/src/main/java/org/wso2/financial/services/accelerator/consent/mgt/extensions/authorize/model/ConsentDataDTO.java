@@ -27,7 +27,6 @@ import java.util.Map;
 
 import javax.validation.Valid;
 import javax.validation.constraints.NotEmpty;
-import javax.validation.constraints.NotNull;
 
 /**
  * Consent data object for external API consent retrieval.
@@ -37,7 +36,6 @@ public class ConsentDataDTO {
     private String type;
 
     @Valid
-    @NotNull
     private Map<String, Object> basicConsentData;
 
     @Valid
@@ -47,6 +45,7 @@ public class ConsentDataDTO {
     private List<AccountDTO> initiatedAccountsForConsent;
     private Boolean allowMultipleAccounts;
     private Boolean isReauthorization;
+    private Map<String, Object> consentMetadata;
     private final Map<String, Object> additionalProperties = new HashMap<>();
 
     public String getType() {
@@ -97,6 +96,14 @@ public class ConsentDataDTO {
 
     public void setIsReauthorization(Boolean reauthorization) {
         isReauthorization = reauthorization;
+    }
+
+    public Map<String, Object> getConsentMetadata() {
+        return consentMetadata;
+    }
+
+    public void setConsentMetadata(Map<String, Object> consentMetadata) {
+        this.consentMetadata = consentMetadata;
     }
 
     @JsonAnyGetter

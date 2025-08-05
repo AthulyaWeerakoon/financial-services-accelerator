@@ -111,7 +111,7 @@ public class ExternalAPIConsentRetrievalStepTest {
         authorizeUtilMockedStatic = mockStatic(ConsentAuthorizeUtil.class);
         authorizeUtilMockedStatic.when(() -> ConsentAuthorizeUtil.extractRequestObject(anyString()))
                 .thenReturn("dummyJWT");
-        authorizeUtilMockedStatic.when(() -> ConsentAuthorizeUtil.extractConsentId(anyString()))
+        authorizeUtilMockedStatic.when(() -> ConsentAuthorizeUtil.extractConsentIdFromRequestObject(anyString()))
                 .thenReturn("consent123");
         authorizeUtilMockedStatic.when(() -> ConsentAuthorizeUtil.addAuthorizedDataObject(any(), any()))
                 .thenCallRealMethod();
@@ -179,7 +179,7 @@ public class ExternalAPIConsentRetrievalStepTest {
         // Mock ConsentAuthorizeUtil statics
         authorizeUtilMockedStatic.when(() -> ConsentAuthorizeUtil.extractRequestObject(anyString()))
                 .thenReturn("dummyJWT");
-        authorizeUtilMockedStatic.when(() -> ConsentAuthorizeUtil.extractConsentId(anyString()))
+        authorizeUtilMockedStatic.when(() -> ConsentAuthorizeUtil.extractConsentIdFromRequestObject(anyString()))
                 .thenReturn("consent123");
 
         ConsentResource mockConsentResource = getMockConsentResource();
@@ -201,7 +201,15 @@ public class ExternalAPIConsentRetrievalStepTest {
         serviceUtilsMockedStatic.when(() -> ServiceExtensionUtils.invokeExternalServiceCall(any(), any()))
                 .thenReturn(externalServiceResponse);
 
+        // Mock config parser
+        configParser.close();
+        configParser = mockStatic(FinancialServicesConfigParser.class);
+        FinancialServicesConfigParser configParserMock = mock(FinancialServicesConfigParser.class);
+        when(configParserMock.getAuthFlowConsentIdSource()).thenReturn("requestObject");
+        configParser.when(FinancialServicesConfigParser::getInstance).thenReturn(configParserMock);
+
         JSONObject jsonObject = new JSONObject();
+        consentRetrievalStep = new ExternalAPIConsentRetrievalStep();
         consentRetrievalStep.execute(realConsentData, jsonObject);
 
         assertTrue(jsonObject.has("consentData"));
@@ -247,6 +255,13 @@ public class ExternalAPIConsentRetrievalStepTest {
         when(consentCoreService.searchAuthorizations(anyString()))
                 .thenReturn(authList);
 
+        // Mock config parser
+        configParser.close();
+        configParser = mockStatic(FinancialServicesConfigParser.class);
+        FinancialServicesConfigParser configParserMock = mock(FinancialServicesConfigParser.class);
+        when(configParserMock.getAuthFlowConsentIdSource()).thenReturn("requestObject");
+        configParser.when(FinancialServicesConfigParser::getInstance).thenReturn(configParserMock);
+
         // Simulate external service failure
         ExternalServiceResponse errorResponse = new ExternalServiceResponse();
         errorResponse.setStatus(StatusEnum.ERROR);
@@ -258,6 +273,7 @@ public class ExternalAPIConsentRetrievalStepTest {
 
         // Execute and expect ConsentException due to error response
         JSONObject jsonObject = new JSONObject();
+        consentRetrievalStep = new ExternalAPIConsentRetrievalStep();
         consentRetrievalStep.execute(realConsentData, jsonObject);
     }
 
@@ -292,6 +308,7 @@ public class ExternalAPIConsentRetrievalStepTest {
         configParser = mockStatic(FinancialServicesConfigParser.class);
         FinancialServicesConfigParser configParserMock = mock(FinancialServicesConfigParser.class);
         when(configParserMock.isPreInitiatedConsent()).thenReturn(true);
+        when(configParserMock.getAuthFlowConsentIdSource()).thenReturn("requestObject");
         configParser.when(FinancialServicesConfigParser::getInstance).thenReturn(configParserMock);
 
         dataHolderMockedStatic.close();
@@ -327,7 +344,7 @@ public class ExternalAPIConsentRetrievalStepTest {
                 .thenReturn("dummyJWT");
         authorizeUtilMockedStatic.when(() -> ConsentAuthorizeUtil.getRequestObjectJson(anyString()))
                 .thenReturn(new JSONObject());
-        authorizeUtilMockedStatic.when(() -> ConsentAuthorizeUtil.extractConsentId(anyString()))
+        authorizeUtilMockedStatic.when(() -> ConsentAuthorizeUtil.extractConsentIdFromRequestObject(anyString()))
                 .thenReturn("consent123");
 
         // Execute
@@ -348,6 +365,7 @@ public class ExternalAPIConsentRetrievalStepTest {
     public void testAddAuthorizedDataObject_withPermissionsAndSelectedConsumerAccounts() throws Exception {
         // Setup permissions
         PermissionDTO permission = new PermissionDTO();
+        permission.setUid("permission-uid");
         permission.setDisplayValues(Collections.singletonList("ReadAccounts"));
 
         // Setup consumer account
@@ -374,9 +392,8 @@ public class ExternalAPIConsentRetrievalStepTest {
         // Build input payload with hashed permission and account
         JSONObject inputPayload = new JSONObject();
         JSONObject accountPermissionParams = new JSONObject();
-        accountPermissionParams.put("permission-0", permissionJSON);
-        accountPermissionParams.put("accounts-0", new JSONArray(Collections.singletonList(accountName)));
-        inputPayload.put("requestAccountPermissionParameters", accountPermissionParams);
+        accountPermissionParams.put("permission-uid", new JSONArray(Collections.singletonList(accountName)));
+        inputPayload.put("requestParameters", accountPermissionParams);
 
         ConsentAuthorizeUtil.addAuthorizedDataObject(inputPayload, metaDataMap);
 
@@ -401,10 +418,6 @@ public class ExternalAPIConsentRetrievalStepTest {
         initiatedAcc.setAccountId("acc-init-1");
         permission.setInitiatedAccounts(Collections.singletonList(initiatedAcc));
 
-        // Build hashes
-        String permissionHash = UUID.nameUUIDFromBytes(
-                new ObjectMapper().writeValueAsString(permission).getBytes(StandardCharsets.UTF_8)).toString();
-
         // Build metadata map
         PopulateConsentAuthorizeScreenDTO responseDTO = new PopulateConsentAuthorizeScreenDTO();
         ConsentDataDTO consentData = new ConsentDataDTO();
@@ -417,8 +430,7 @@ public class ExternalAPIConsentRetrievalStepTest {
         // Build input payload with hashed permission and account
         JSONObject inputPayload = new JSONObject();
         JSONObject accountPermissionParams = new JSONObject();
-        accountPermissionParams.put("permission-0", permissionHash);
-        inputPayload.put("requestAccountPermissionParameters", accountPermissionParams);
+        inputPayload.put("requestParameters", accountPermissionParams);
 
         ConsentAuthorizeUtil.addAuthorizedDataObject(inputPayload, metaDataMap);
 
@@ -444,10 +456,6 @@ public class ExternalAPIConsentRetrievalStepTest {
         AccountDTO initiatedAcc = new AccountDTO();
         initiatedAcc.setAccountId("acc-init-1");
 
-        // Build hashes
-        String permissionHash = UUID.nameUUIDFromBytes(
-                new ObjectMapper().writeValueAsString(permission).getBytes(StandardCharsets.UTF_8)).toString();
-
         // Build metadata map
         PopulateConsentAuthorizeScreenDTO responseDTO = new PopulateConsentAuthorizeScreenDTO();
         ConsentDataDTO consentData = new ConsentDataDTO();
@@ -461,8 +469,7 @@ public class ExternalAPIConsentRetrievalStepTest {
         // Build input payload with hashed permission and account
         JSONObject inputPayload = new JSONObject();
         JSONObject accountPermissionParams = new JSONObject();
-        accountPermissionParams.put("permission-0", permissionHash);
-        inputPayload.put("requestAccountPermissionParameters", accountPermissionParams);
+        inputPayload.put("requestParameters", accountPermissionParams);
 
         ConsentAuthorizeUtil.addAuthorizedDataObject(inputPayload, metaDataMap);
 
@@ -503,7 +510,7 @@ public class ExternalAPIConsentRetrievalStepTest {
         JSONObject inputPayload = new JSONObject();
         JSONObject accountPermissionParams = new JSONObject();
         accountPermissionParams.put("accounts", new JSONArray(Collections.singletonList(accountName)));
-        inputPayload.put("requestAccountPermissionParameters", accountPermissionParams);
+        inputPayload.put("requestParameters", accountPermissionParams);
 
         ConsentAuthorizeUtil.addAuthorizedDataObject(inputPayload, metaDataMap);
 
@@ -536,7 +543,7 @@ public class ExternalAPIConsentRetrievalStepTest {
         // Build input payload with hashed permission and account
         JSONObject inputPayload = new JSONObject();
         JSONObject accountPermissionParams = new JSONObject();
-        inputPayload.put("requestAccountPermissionParameters", accountPermissionParams);
+        inputPayload.put("requestParameters", accountPermissionParams);
 
         ConsentAuthorizeUtil.addAuthorizedDataObject(inputPayload, metaDataMap);
 
@@ -565,7 +572,7 @@ public class ExternalAPIConsentRetrievalStepTest {
         // Build input payload with hashed permission and account
         JSONObject inputPayload = new JSONObject();
         JSONObject accountPermissionParams = new JSONObject();
-        inputPayload.put("requestAccountPermissionParameters", accountPermissionParams);
+        inputPayload.put("requestParameters", accountPermissionParams);
 
         ConsentAuthorizeUtil.addAuthorizedDataObject(inputPayload, metaDataMap);
 

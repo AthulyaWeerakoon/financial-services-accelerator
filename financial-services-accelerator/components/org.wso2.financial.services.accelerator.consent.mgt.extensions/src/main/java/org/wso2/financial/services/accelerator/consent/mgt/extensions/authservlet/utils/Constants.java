@@ -73,4 +73,6 @@ public class Constants {
     public static final String RE_AUTHENTICATION_DISCLAIMER = "reAuthenticationDisclaimer";
     public static final String IF_STOP_DATA_SHARING = "ifStopDataSharing";
     public static final String DO_YOU_CONFIRM = "doYouConfirm";
+
+    public static final String CONSENT_AUTHORIZE_JSP_PATH = "Consent.AuthorizeJSP.Path";
 }

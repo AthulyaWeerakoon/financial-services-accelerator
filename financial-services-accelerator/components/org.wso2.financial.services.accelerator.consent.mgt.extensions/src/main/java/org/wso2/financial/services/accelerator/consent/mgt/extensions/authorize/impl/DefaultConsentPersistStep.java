@@ -29,6 +29,7 @@ import org.wso2.financial.services.accelerator.consent.mgt.dao.models.DetailedCo
 import org.wso2.financial.services.accelerator.consent.mgt.extensions.authorize.ConsentPersistStep;
 import org.wso2.financial.services.accelerator.consent.mgt.extensions.authorize.model.AccountDTO;
 import org.wso2.financial.services.accelerator.consent.mgt.extensions.authorize.model.ConsentData;
+import org.wso2.financial.services.accelerator.consent.mgt.extensions.authorize.model.ConsentDataDTO;
 import org.wso2.financial.services.accelerator.consent.mgt.extensions.authorize.model.ConsentPersistData;
 import org.wso2.financial.services.accelerator.consent.mgt.extensions.authorize.model.ConsumerAccountDTO;
 import org.wso2.financial.services.accelerator.consent.mgt.extensions.authorize.model.PermissionDTO;
@@ -166,75 +167,79 @@ public class DefaultConsentPersistStep implements ConsentPersistStep {
                 .get(ConsentAuthorizeConstants.EXTERNAL_API_PRE_CONSENT_AUTHORIZE_RESPONSE);
 
         // Extract and separate permissions, consumer accounts and consent initiated accounts
-        List<PermissionDTO> permissions = populateResponseDTO.getConsentData()
-                .getPermissions();
-        List<AccountDTO> initiatedAccountsForConsent = populateResponseDTO.getConsentData()
-                .getInitiatedAccountsForConsent();
+        ConsentDataDTO consentData = populateResponseDTO.getConsentData();
+
+        List<PermissionDTO> permissions = consentData.getPermissions();
+        List<AccountDTO> initiatedAccountsForConsent = consentData.getInitiatedAccountsForConsent();
         List<ConsumerAccountDTO> consumerAccounts = null;
         if (populateResponseDTO.getConsumerData() != null) {
             consumerAccounts = populateResponseDTO.getConsumerData().getAccounts();
         }
 
-        // Build consumer hash to consumer account map
-        Map<String, ConsumerAccountDTO> accountNameToObject = new HashMap<>();
+        // Build consumer account name to consumer account object map
+        Map<String, ConsumerAccountDTO> accountNameToObjectMap = new HashMap<>();
         if (consumerAccounts != null) {
             for (ConsumerAccountDTO consumerAccount: consumerAccounts) {
-                accountNameToObject.put(consumerAccount.getDisplayName(), consumerAccount);
+                accountNameToObjectMap.put(consumerAccount.getDisplayName(), consumerAccount);
             }
         }
 
-        // Set of all accounts to map
-        Set<AccountDTO> allAccountsToMap = new HashSet<>();
+        // Set of all accounts to map with default permission
+        Set<AccountDTO> allAccountsSet = new HashSet<>();
 
         // Append all consent initiated accounts
         if (initiatedAccountsForConsent != null) {
-            allAccountsToMap.addAll(initiatedAccountsForConsent);
+            allAccountsSet.addAll(initiatedAccountsForConsent);
         }
 
         // Append all permission initiated accounts
         if (permissions != null) {
-            Set<AccountDTO> allAccountsSet = new HashSet<>();
+            Set<AccountDTO> allAccountsWithPermissionsSet = new HashSet<>();
             for (PermissionDTO permission: permissions) {
                 List<AccountDTO> initiatedAccounts = permission.getInitiatedAccounts();
                 if (initiatedAccounts != null) {
-                    allAccountsSet.addAll(initiatedAccounts);
+                    allAccountsWithPermissionsSet.addAll(initiatedAccounts);
                 }
             }
-            allAccountsToMap.addAll(allAccountsSet);
+            allAccountsSet.addAll(allAccountsWithPermissionsSet);
         }
 
         // Append all selected consumer accounts
-        Boolean allowMultipleAccounts = populateResponseDTO.getConsentData().getAllowMultipleAccounts();
-        allowMultipleAccounts = allowMultipleAccounts != null && allowMultipleAccounts;
-        boolean foundOneAccount = false;
-        JSONObject accountPermissionParameters =
-                persistPayload.optJSONObject(ConsentAuthorizeConstants.REQUEST_ACCOUNT_PERMISSION_PARAMETERS);
-        if (accountPermissionParameters != null) {
-            for (String key: accountPermissionParameters.keySet()) {
-                if (key.contains("accounts")) {
+        boolean allowMultipleAccounts = Boolean.TRUE.equals(consentData.getAllowMultipleAccounts());
+        JSONObject requestParameters =
+                persistPayload.optJSONObject(ConsentAuthorizeConstants.REQUEST_PARAMETERS);
+        if (requestParameters != null) {
+            for (String key: requestParameters.keySet()) {
+
+                JSONArray parameterValues = requestParameters.optJSONArray(key);
+                if (parameterValues == null) {
+                    continue;
+                }
+
+                boolean foundOneAccount = false;
+                for (int i = 0; i < parameterValues.length(); i++) {
+
+                    ConsumerAccountDTO accountObject = accountNameToObjectMap.getOrDefault(parameterValues.getString(i),
+                            null);
+                    if (accountObject == null) {
+                        continue;
+                    }
 
                     // allowMultipleAccounts validation
                     if (foundOneAccount && !allowMultipleAccounts) {
-                        throw new IllegalStateException("Found multiple account selections when only one is allowed");
+                        log.error("Found multiple account selections when only one is allowed");
+                        throw new ConsentException(ResponseStatus.BAD_REQUEST,
+                                "Found multiple account selections when only one is allowed");
                     }
 
                     foundOneAccount = true;
-                    JSONArray accounts = accountPermissionParameters.optJSONArray(key);
-                    if (accounts != null) {
-                        for (Object account: accounts) {
-                            String accountName = (String) account;
-                            AccountDTO accountObject = accountNameToObject.get(accountName);
-                            if (accountObject != null) {
-                                allAccountsToMap.add(accountObject);
-                            }
-                        }
-                    }
+                    allAccountsSet.add(accountObject);
                 }
             }
         }
 
-        // Map all accounts to default permission
-        for (AccountDTO account: allAccountsToMap) {
+        // Map accounts in the set of all accounts to default permission
+        for (AccountDTO account: allAccountsSet) {
             hasAuthorizedAccounts = true;
             accountIDsMapWithPermissions.put(account.getAccountId(), permissionsDefault);
         }

@@ -17,7 +17,7 @@
  */
 package org.wso2.financial.services.accelerator.consent.mgt.extensions.authorize.model;
 
-import java.util.Map;
+import javax.validation.Valid;
 
 import javax.validation.Valid;
 import javax.validation.constraints.NotNull;
@@ -28,13 +28,10 @@ import javax.validation.constraints.NotNull;
 public class PopulateConsentAuthorizeScreenDTO {
 
     @Valid
-    @NotNull
     private ConsentDataDTO consentData;
 
     @Valid
     private ConsumerDataDTO consumerData;
-
-    private Map<String, Object> metadata;
 
     public ConsentDataDTO getConsentData() {
         return consentData;
